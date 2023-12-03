@@ -1,0 +1,252 @@
+import pandas as pd
+import random
+import string
+from cryptography.fernet import Fernet
+import os
+
+class BankSystem:
+    def __init__(self):
+        columns = ['Name', 'AccountNumber', 'Password', 'Key', 'AccountType', 'Balance',
+                   'SecurityQuestion', 'SecurityAnswer']
+        self.clients_data = pd.DataFrame(columns=columns)
+        self.load_data()  # load data when the program starts 
+        '''error here'''
+
+    def generate_account_number(self):
+        while True:
+            account_number = ''.join(random.choice(string.digits) for _ in range(4))
+    
+            # check if account_number is not already being used by another client
+            if str(account_number) not in self.clients_data['AccountNumber'].astype(str).values:
+                return str(account_number)
+
+    def generate_password(self):
+        return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(random.randint(4, 7)))
+
+    def generate_key(self):
+        return Fernet.generate_key()
+
+    def encrypt_data(self, data, key):
+        f = Fernet(key)
+        return f.encrypt(data.encode())
+
+    def decrypt_data(self, data, key):
+        f = Fernet(key)
+        return f.decrypt(data).decode()
+
+    def create_account(self):
+        name = input("Enter your name: ")
+        print("Select your account type:")
+        print("1. Student")
+        print("2. Professional")
+        print("3. Educator")
+        account_type_option = input("Enter the option number: ")
+        account_type_options = ['Student', 'Professional', 'Educator']
+        account_type = account_type_options[int(account_type_option) - 1]
+
+        account_number = self.generate_account_number()
+        print(f'Your account number is: {account_number}')
+
+        # Generate 4 password suggestions
+        suggested_passwords = [self.generate_password() for _ in range(4)]
+
+        # Display password suggestions
+        print("Choose a password or enter your own:")
+        for i, password in enumerate(suggested_passwords, start=1):
+            print(f"{i}. {password}")
+        print(f"{len(suggested_passwords) + 1}. Enter your own password")
+
+        password_option = input("Enter the option number: ")
+        if password_option == str(len(suggested_passwords) + 1):
+            password = input("Enter your own password: ")
+        else:
+            password = suggested_passwords[int(password_option) - 1]
+                    
+        key = self.generate_key()
+        encrypted_password = self.encrypt_data(password, key)
+        
+        # Add security question and answer
+        security_question = input("Choose a security question: ")
+        security_answer = input("Enter the answer to your security question: ")
+        
+        new_client = pd.Series({'Name': name, 'AccountNumber': account_number, 'Password': encrypted_password,
+                                'Key': key.decode(), 'AccountType': account_type, 'Balance': 0,
+                                'SecurityQuestion': security_question, 'SecurityAnswer': security_answer})
+    
+        self.clients_data = self.clients_data.append(new_client, ignore_index=True)  
+        
+        print("\n\nAccount created successfully!")
+        print("Your account information is:")
+        print(f"Name: {name}")
+        print(f"Account Number: {account_number}")
+        print(f"Account Type: {account_type}")
+        print(f"Password: {password}")
+        print(f"Security Question: {security_question}")
+        print(f"Security Answer: {security_answer}")
+
+    def recover_password(self):
+        account_number = input("Enter your account number: ")
+        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number]
+    
+        if not user_data.empty:
+            stored_security_question = user_data['SecurityQuestion'].iloc[0]
+            user_response = input(f"Security Question: {stored_security_question}\nEnter your answer: ")
+    
+            if user_response.lower() == user_data['SecurityAnswer'].iloc[0].lower():
+                # User's answer matches stored answer, allow password reset
+                new_password = input("Enter your new password: ")
+                key = self.generate_key()
+                encrypted_new_password = self.encrypt_data(new_password, key)
+    
+                # Update the DataFrame with the new password and key
+                self.clients_data.at[user_data.index[0], 'Password'] = encrypted_new_password
+                self.clients_data.at[user_data.index[0], 'Key'] = key
+    
+                print("Password reset successfully.")
+            else:
+                print("Incorrect answer to the security question.")
+        else:
+            print("Account number not found in our records.")
+
+    def delete_account(self, account_number):
+        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number]
+
+        if not user_data.empty:
+            confirmation = input(f"Do you really want to delete the account for {user_data.iloc[0]['Name']}? (yes/no): ").lower()
+
+            if confirmation == 'yes':
+                self.clients_data = self.clients_data[self.clients_data['AccountNumber'] != account_number]
+                print(f"Account for {user_data.iloc[0]['Name']} deleted successfully.")
+            else:
+                print("Account deletion canceled.")
+        else:
+            print("Account number not found in our records.")
+
+    def authenticate_user(self):
+        account_number = input("Enter your account number: ")
+    
+        # Convert account_number to string for comparison
+        account_number_str = str(account_number)
+    
+        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number_str]
+    
+        if not user_data.empty:
+            key = user_data['Key'].iloc[0]
+            decrypted_password = self.decrypt_data(user_data['Password'].iloc[0], key)
+    
+            password = input("Enter your password: ")
+    
+            if password == decrypted_password:
+                print(f"Welcome, {user_data['Name'].iloc[0]}!")
+                return account_number_str
+            else:
+                print("Invalid password.")
+                return None
+        else:
+            print("Invalid account number.")
+            return None
+
+
+    def display_balance(self, account_number):
+        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number]
+        print(f"Balance for {user_data.iloc[0]['Name']}: ${user_data.iloc[0]['Balance']}")
+
+    def deposit(self, account_number, amount):
+        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number]
+        self.clients_data.at[user_data.index[0], 'Balance'] += amount
+        print("Deposit successful.")
+        self.display_balance(account_number)
+
+    def withdraw(self, account_number, amount):
+        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number]
+
+        if amount > user_data.iloc[0]['Balance']:
+            print("Insufficient funds. Withdrawal not allowed.")
+        else:
+            self.clients_data.at[user_data.index[0], 'Balance'] -= amount
+            print("Withdrawal successful.")
+            self.display_balance(account_number)
+
+    def transfer(self, sender_account_number, recipient_account_number, amount):
+        sender_data = self.clients_data[self.clients_data['AccountNumber'] == sender_account_number]
+        recipient_data = self.clients_data[self.clients_data['AccountNumber'] == recipient_account_number]
+
+        if amount > sender_data.iloc[0]['Balance']:
+            print("Insufficient funds. Transfer not allowed.")
+        else:
+            self.clients_data.at[sender_data.index[0], 'Balance'] -= amount
+            self.clients_data.at[recipient_data.index[0], 'Balance'] += amount
+            print("Transfer successful.")
+            self.display_balance(sender_account_number)
+
+    # save dataframe to a csv file
+    def save_data(self):
+        self.clients_data.to_csv('bank_data.csv', index=False)
+
+
+def main():
+    bank_system = BankSystem()
+
+    while True:
+        print("\nChoose an option:")
+        print("1. Create account")
+        print("2. Login to your account")
+        print("3. Recover Password")
+        print("4. Exit")
+
+        choice = input("Enter the option number: ")
+
+        if choice == "1":
+            bank_system.create_account()
+
+        elif choice == "2":
+            account_number = bank_system.authenticate_user()
+
+            if account_number:
+                while True:
+                    print("\nChoose an option:")
+                    print("1. Deposit")
+                    print("2. Withdraw")
+                    print("3. Transfer")
+                    print("4. Check Balance")
+                    print("5. Logout")
+                    print("6. Delete account")
+
+                    sub_choice = input("Enter the option number: ")
+
+                    if sub_choice == "1":
+                        amount = float(input("Enter the amount to deposit: "))
+                        bank_system.deposit(account_number, amount)
+                    elif sub_choice == "2":
+                        amount = float(input("Enter the amount to withdraw: "))
+                        bank_system.withdraw(account_number, amount)
+                    elif sub_choice == "3":
+                        recipient_account_number = input("Enter recipient's account number: ")
+                        amount = float(input("Enter the amount to transfer: "))
+                        bank_system.transfer(account_number, recipient_account_number, amount)
+                    elif sub_choice == "4":
+                        bank_system.display_balance(account_number)
+                    elif sub_choice == "5":
+                        print("Logging out. Have a great day!")
+                        break
+                    elif sub_choice == "6":
+                        # Option for account deletion
+                        account_number_to_delete = input("Enter the account number to delete: ")
+                        bank_system.delete_account(account_number_to_delete)
+                    else:
+                        print("Invalid option. Please enter a valid option.")
+                        
+                    bank_system.save_data()  # Save data
+
+        elif choice == "3":
+            bank_system.recover_password()
+
+        elif choice == "4":
+            print("Exiting the program. Have a great day!")
+            bank_system.save_data()  # Save data before exiting
+            break
+        else:
+            print("Invalid option. Please enter a valid option.")
+
+if __name__ == "__main__":
+    main()
