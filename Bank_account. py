@@ -1,25 +1,212 @@
-import pandas as pd
+#Need to improve the tkinter implementation to include all methods
+#Have made some steps  here but it is far from satisfactory
+#need nested windows. Basically, just sticking to the program logic
+
+
 import random
 import string
+import tkinter as tk
+from tkinter import messagebox
+
 from cryptography.fernet import Fernet
-import os
+from sqlalchemy import Column, Float, Integer, String, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+
+class BankGUI:
+    def __init__(self, bank_system):
+        self.bank_system = bank_system
+
+        self.root = tk.Tk()
+        self.root.title("Bank Account System")
+
+        self.create_account_button = tk.Button(self.root, text="Create Account", command=self.create_account)
+        self.create_account_button.pack(pady=10)
+
+        self.login_button = tk.Button(self.root, text="Login", command=self.login)
+        self.login_button.pack(pady=10)
+
+        self.recover_password_button = tk.Button(self.root, text="Recover Password", command=self.recover_password)
+        self.recover_password_button.pack(pady=10)
+
+        self.exit_button = tk.Button(self.root, text="Exit", command=self.root.destroy)
+        self.exit_button.pack(pady=10)
+
+    def create_account(self):
+        try:
+            account_number = self.bank_system.create_account()
+            if account_number:
+                messagebox.showinfo("Success", "Account created successfully!")
+            else:
+                messagebox.showerror("Error", "Failed to create account.")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    # Similar modifications need to be made for login and recover_password methods
+
+    def login(self):
+        # Create a top-level window for login dialog
+        login_dialog = tk.Toplevel(self.root)
+        login_dialog.title("Login")
+
+        # Create a label and entry widget for account number
+        tk.Label(login_dialog, text="Enter your account number:").pack()
+        account_number_entry = tk.Entry(login_dialog)
+        account_number_entry.pack()
+
+        # Create a label and entry widget for password
+        tk.Label(login_dialog, text="Enter your password:").pack()
+        password_entry = tk.Entry(login_dialog, show="*")
+        password_entry.pack()
+
+        # Login function to call when user submits the login form
+        def on_login_submit():
+            account_number = account_number_entry.get()
+            password = password_entry.get()
+            success = self.bank_system.authenticate_user(account_number, password)
+            if success:
+                messagebox.showinfo("Success", "Login successful!")
+                login_dialog.destroy()  # Close the dialog
+            else:
+                messagebox.showerror("Error", "Invalid credentials.")
+
+        # Button to submit the login form
+        submit_button = tk.Button(login_dialog, text="Login", command=on_login_submit)
+        submit_button.pack()
+
+        # This line below will wait until the window is destroyed before continuing
+        self.root.wait_window(login_dialog)
+
+    def recover_password(self):
+        success = self.bank_system.recover_password()
+        if success:
+            messagebox.showinfo("Success", "Password reset successful!")
+        else:
+            messagebox.showerror("Error", "Failed to reset password.")
+
+    def main_menu(self, account_number):
+      # Create a top-level window for the main menu
+      main_menu_window = tk.Toplevel(self.root)
+      main_menu_window.title("Main Menu")
+
+      while True:
+          print("\nChoose an option:")
+          print("1. Deposit")
+          print("2. Withdraw")
+          print("3. Transfer")
+          print("4. Check Balance")
+          print("5. Logout")
+
+          choice = input("Enter the option number: ")
+
+          if choice == "1":
+              self.show_deposit_window(account_number, main_menu_window)
+          elif choice == "2":
+              self.show_withdraw_window(account_number, main_menu_window)
+          elif choice == "3":
+              self.show_transfer_window(account_number, main_menu_window)
+          elif choice == "4":
+              self.check_balance(account_number, main_menu_window)
+          elif choice == "5":
+              print("Logging out. Have a great day!")
+              main_menu_window.destroy()
+              break
+          else:
+              print("Invalid option. Please enter a valid option.")
+
+    def show_deposit_window(self, account_number, parent_window):
+      # Create a top-level window for the deposit transaction
+      deposit_window = tk.Toplevel(parent_window)
+      deposit_window.title("Deposit")
+
+      tk.Label(deposit_window, text="Enter the amount to deposit:").pack()
+      amount_entry = tk.Entry(deposit_window)
+      amount_entry.pack()
+
+      def deposit_submit():
+          amount = float(amount_entry.get())
+          self.bank_system.deposit(account_number, amount)
+          deposit_window.destroy()
+
+      submit_button = tk.Button(deposit_window, text="Deposit", command=deposit_submit)
+      submit_button.pack()
+
+    def show_withdraw_window(self, account_number, parent_window):
+      # Create a top-level window for the withdraw transaction
+      withdraw_window = tk.Toplevel(parent_window)
+      withdraw_window.title("Withdraw")
+
+      tk.Label(withdraw_window, text="Enter the amount to withdraw:").pack()
+      amount_entry = tk.Entry(withdraw_window)
+      amount_entry.pack()
+
+      def withdraw_submit():
+          amount = float(amount_entry.get())
+          self.bank_system.withdraw(account_number, amount)
+          withdraw_window.destroy()
+
+      submit_button = tk.Button(withdraw_window, text="Withdraw", command=withdraw_submit)
+      submit_button.pack()
+
+    def show_transfer_window(self, sender_account_number, parent_window):
+      # Create a top-level window for the transfer transaction
+      transfer_window = tk.Toplevel(parent_window)
+      transfer_window.title("Transfer")
+
+      tk.Label(transfer_window, text="Enter recipient's account number:").pack()
+      recipient_entry = tk.Entry(transfer_window)
+      recipient_entry.pack()
+
+      tk.Label(transfer_window, text="Enter the amount to transfer:").pack()
+      amount_entry = tk.Entry(transfer_window)
+      amount_entry.pack()
+
+      def transfer_submit():
+        recipient_account_number = recipient_entry.get()
+        amount = float(amount_entry.get())
+        self.bank_system.transfer(sender_account_number, recipient_account_number, amount)
+        transfer_window.destroy()
+
+      submit_button = tk.Button(transfer_window, text="Transfer", command=transfer_submit)
+      submit_button.pack()
+
+    def check_balance(self, account_number, parent_window):
+        # Create a top-level window for the balance check
+        balance_window = tk.Toplevel(parent_window)
+        balance_window.title("Balance")   
+        
+    def run(self):
+        self.root.mainloop()
+      def close(self):
+Base = declarative_base()
+
+class Client(Base):
+    __tablename__ = 'clients'
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    account_number = Column(String, unique=True)
+    password = Column(String)
+    key = Column(String)
+    account_type = Column(String)
+    balance = Column(Float)
+    security_question = Column(String)
+    security_answer = Column(String)
 
 class BankSystem:
     def __init__(self):
-        columns = ['Name', 'AccountNumber', 'Password', 'Key', 'AccountType', 'Balance',
-                   'SecurityQuestion', 'SecurityAnswer']
-        self.clients_data = pd.DataFrame(columns=columns)
-        self.load_data()  # load data when the program starts 
-        '''error here'''
+        # Connect to SQLite database
+        engine = create_engine('sqlite:///bank_data.db', echo=True)
+        Base.metadata.create_all(engine)
+        self.Session = sessionmaker(bind=engine)
 
-    def generate_account_number(self):
+    def generate_account_number(self, session):
         while True:
             account_number = ''.join(random.choice(string.digits) for _ in range(4))
-    
-            # check if account_number is not already being used by another client
-            if str(account_number) not in self.clients_data['AccountNumber'].astype(str).values:
-                return str(account_number)
 
+            # check if account_number is not already being used by another client
+            if not session.query(Client).filter_by(account_number=account_number).first():
+                return account_number
     def generate_password(self):
         return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(random.randint(4, 7)))
 
@@ -44,145 +231,163 @@ class BankSystem:
         account_type_options = ['Student', 'Professional', 'Educator']
         account_type = account_type_options[int(account_type_option) - 1]
 
-        account_number = self.generate_account_number()
-        print(f'Your account number is: {account_number}')
+        # Create a session
+        with self.Session() as session:
+            account_number = self.generate_account_number(session)
+            print(f'Your account number is: {account_number}')
 
-        # Generate 4 password suggestions
-        suggested_passwords = [self.generate_password() for _ in range(4)]
+            # Generate 4 password suggestions
+            suggested_passwords = [self.generate_password() for _ in range(4)]
 
-        # Display password suggestions
-        print("Choose a password or enter your own:")
-        for i, password in enumerate(suggested_passwords, start=1):
-            print(f"{i}. {password}")
-        print(f"{len(suggested_passwords) + 1}. Enter your own password")
+            # Display password suggestions
+            print("Choose a password or enter your own:")
+            for i, password in enumerate(suggested_passwords, start=1):
+                print(f"{i}. {password}")
+            print(f"{len(suggested_passwords) + 1}. Enter your own password")
 
-        password_option = input("Enter the option number: ")
-        if password_option == str(len(suggested_passwords) + 1):
-            password = input("Enter your own password: ")
-        else:
-            password = suggested_passwords[int(password_option) - 1]
-                    
-        key = self.generate_key()
-        encrypted_password = self.encrypt_data(password, key)
-        
-        # Add security question and answer
-        security_question = input("Choose a security question: ")
-        security_answer = input("Enter the answer to your security question: ")
-        
-        new_client = pd.Series({'Name': name, 'AccountNumber': account_number, 'Password': encrypted_password,
-                                'Key': key.decode(), 'AccountType': account_type, 'Balance': 0,
-                                'SecurityQuestion': security_question, 'SecurityAnswer': security_answer})
-    
-        self.clients_data = self.clients_data.append(new_client, ignore_index=True)  
-        
-        print("\n\nAccount created successfully!")
-        print("Your account information is:")
-        print(f"Name: {name}")
-        print(f"Account Number: {account_number}")
-        print(f"Account Type: {account_type}")
-        print(f"Password: {password}")
-        print(f"Security Question: {security_question}")
-        print(f"Security Answer: {security_answer}")
+            password_option = input("Enter the option number: ")
+            if password_option == str(len(suggested_passwords) + 1):
+                password = input("Enter your own password: ")
+            else:
+                password = suggested_passwords[int(password_option) - 1]
+
+            key = self.generate_key()
+            encrypted_password = self.encrypt_data(password, key)
+
+            # Add security question and answer
+            security_question = input("Choose a security question: ")
+            security_answer = input("Enter the answer to your security question: ")
+
+            new_client = Client(
+                name=name,
+                account_number=account_number,
+                password=encrypted_password,
+                key=key.decode(),
+                account_type=account_type,
+                balance=0,
+                security_question=security_question,
+                security_answer=security_answer
+            )
+
+            session.add(new_client)
+            session.commit()
+
+            print("\n\nAccount created successfully!")
+            print("Your account information is:")
+            print(f"Name: {name}")
+            print(f"Account Number: {account_number}")
+            print(f"Account Type: {account_type}")
+            print(f"Password: {password}")
+            print(f"Security Question: {security_question}")
+            print(f"Security Answer: {security_answer}")
 
     def recover_password(self):
         account_number = input("Enter your account number: ")
-        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number]
-    
-        if not user_data.empty:
-            stored_security_question = user_data['SecurityQuestion'].iloc[0]
-            user_response = input(f"Security Question: {stored_security_question}\nEnter your answer: ")
-    
-            if user_response.lower() == user_data['SecurityAnswer'].iloc[0].lower():
-                # User's answer matches stored answer, allow password reset
-                new_password = input("Enter your new password: ")
-                key = self.generate_key()
-                encrypted_new_password = self.encrypt_data(new_password, key)
-    
-                # Update the DataFrame with the new password and key
-                self.clients_data.at[user_data.index[0], 'Password'] = encrypted_new_password
-                self.clients_data.at[user_data.index[0], 'Key'] = key
-    
-                print("Password reset successfully.")
+
+        with self.Session() as session:
+            user_data = session.query(Client).filter_by(account_number=account_number).first()
+
+            if user_data:
+                stored_security_question = user_data.security_question
+                user_response = input(f"Security Question: {stored_security_question}\nEnter your answer: ")
+
+                if user_response.lower() == user_data.security_answer.lower():
+                    # User's answer matches stored answer, allow password reset
+                    new_password = input("Enter your new password: ")
+                    key = self.generate_key()
+                    encrypted_new_password = self.encrypt_data(new_password, key)
+
+                    # Update the client's information
+                    user_data.password = encrypted_new_password
+                    user_data.key = key.decode()
+
+                    session.commit()
+                    print("Password reset successfully.")
+                else:
+                    print("Incorrect answer to the security question.")
             else:
-                print("Incorrect answer to the security question.")
-        else:
-            print("Account number not found in our records.")
+                print("Account number not found in our records.")
 
     def delete_account(self, account_number):
-        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number]
+        with self.Session() as session:
+            user_data = session.query(Client).filter_by(account_number=account_number).first()
 
-        if not user_data.empty:
-            confirmation = input(f"Do you really want to delete the account for {user_data.iloc[0]['Name']}? (yes/no): ").lower()
+            if user_data:
+                confirmation = input(f"Do you really want to delete the account for {user_data.name}? (yes/no): ").lower()
 
-            if confirmation == 'yes':
-                self.clients_data = self.clients_data[self.clients_data['AccountNumber'] != account_number]
-                print(f"Account for {user_data.iloc[0]['Name']} deleted successfully.")
+                if confirmation == 'yes':
+                    session.delete(user_data)
+                    session.commit()
+                    print(f"Account for {user_data.name} deleted successfully.")
+                else:
+                    print("Account deletion canceled.")
             else:
-                print("Account deletion canceled.")
-        else:
-            print("Account number not found in our records.")
+                print("Account number not found in our records.")
 
     def authenticate_user(self):
         account_number = input("Enter your account number: ")
-    
-        # Convert account_number to string for comparison
-        account_number_str = str(account_number)
-    
-        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number_str]
-    
-        if not user_data.empty:
-            key = user_data['Key'].iloc[0]
-            decrypted_password = self.decrypt_data(user_data['Password'].iloc[0], key)
-    
-            password = input("Enter your password: ")
-    
-            if password == decrypted_password:
-                print(f"Welcome, {user_data['Name'].iloc[0]}!")
-                return account_number_str
-            else:
-                print("Invalid password.")
-                return None
-        else:
-            print("Invalid account number.")
-            return None
 
+        with self.Session() as session:
+            user_data = session.query(Client).filter_by(account_number=account_number).first()
+
+            if user_data:
+                key = user_data.key
+                decrypted_password = self.decrypt_data(user_data.password, key)
+
+                password = input("Enter your password: ")
+
+                if password == decrypted_password:
+                    print(f"Welcome, {user_data.name}!")
+                    return account_number
+                else:
+                    print("Invalid password.")
+                    return None
+            else:
+                print("Invalid account number.")
+                return None
 
     def display_balance(self, account_number):
-        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number]
-        print(f"Balance for {user_data.iloc[0]['Name']}: ${user_data.iloc[0]['Balance']}")
+        with self.Session() as session:
+            user_data = session.query(Client).filter_by(account_number=account_number).first()
+            print(f"Balance for {user_data.name}: ${user_data.balance}")
 
     def deposit(self, account_number, amount):
-        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number]
-        self.clients_data.at[user_data.index[0], 'Balance'] += amount
-        print("Deposit successful.")
-        self.display_balance(account_number)
-
-    def withdraw(self, account_number, amount):
-        user_data = self.clients_data[self.clients_data['AccountNumber'] == account_number]
-
-        if amount > user_data.iloc[0]['Balance']:
-            print("Insufficient funds. Withdrawal not allowed.")
-        else:
-            self.clients_data.at[user_data.index[0], 'Balance'] -= amount
-            print("Withdrawal successful.")
+        with self.Session() as session:
+            user_data = session.query(Client).filter_by(account_number=account_number).first()
+            user_data.balance += amount
+            session.commit()
+            print("Deposit successful.")
             self.display_balance(account_number)
 
+    def withdraw(self, account_number, amount):
+        with self.Session() as session:
+            user_data = session.query(Client).filter_by(account_number=account_number).first()
+
+            if amount > user_data.balance:
+                print("Insufficient funds. Withdrawal not allowed.")
+            else:
+                user_data.balance -= amount
+                session.commit()
+                print("Withdrawal successful.")
+                self.display_balance(account_number)
+
     def transfer(self, sender_account_number, recipient_account_number, amount):
-        sender_data = self.clients_data[self.clients_data['AccountNumber'] == sender_account_number]
-        recipient_data = self.clients_data[self.clients_data['AccountNumber'] == recipient_account_number]
+        with self.Session() as session:
+            sender_data = session.query(Client).filter_by(account_number=sender_account_number).first()
+            recipient_data = session.query(Client).filter_by(account_number=recipient_account_number).first()
 
-        if amount > sender_data.iloc[0]['Balance']:
-            print("Insufficient funds. Transfer not allowed.")
-        else:
-            self.clients_data.at[sender_data.index[0], 'Balance'] -= amount
-            self.clients_data.at[recipient_data.index[0], 'Balance'] += amount
-            print("Transfer successful.")
-            self.display_balance(sender_account_number)
+            if amount > sender_data.balance:
+                print("Insufficient funds. Transfer not allowed.")
+            else:
+                sender_data.balance -= amount
+                recipient_data.balance += amount
+                session.commit()
+                print("Transfer successful.")
+                self.display_balance(sender_account_number)
 
-    # save dataframe to a csv file
     def save_data(self):
-        self.clients_data.to_csv('bank_data.csv', index=False)
-
+        # No longer needed as data is persisted in the SQLite database
+        pass
 
 def main():
     bank_system = BankSystem()
@@ -235,18 +440,21 @@ def main():
                         bank_system.delete_account(account_number_to_delete)
                     else:
                         print("Invalid option. Please enter a valid option.")
-                        
-                    bank_system.save_data()  # Save data
 
         elif choice == "3":
             bank_system.recover_password()
 
         elif choice == "4":
             print("Exiting the program. Have a great day!")
-            bank_system.save_data()  # Save data before exiting
             break
         else:
             print("Invalid option. Please enter a valid option.")
 
 if __name__ == "__main__":
-    main()
+    bank_system = BankSystem()
+    bank_gui = BankGUI(bank_system)
+    bank_gui.run()
+
+
+
+
